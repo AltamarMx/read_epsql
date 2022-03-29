@@ -1,10 +1,11 @@
+
 import sqlite3 as sql
 import pandas as pd
 import matplotlib.pyplot as plt
 import ipython_genutils
 
 class read_eplusql:
-    def __init__(self,file,read="all",):
+    def __init__(self,file,read="all",rename=False):
         
         self.myconn = sql.connect(file)
         if (read=="data") or (read=="all"):
@@ -13,7 +14,10 @@ class read_eplusql:
 
             variables['variable_name'] = variables.KeyValue + ':' + variables.Name + ' (' + variables.Units + ')'
             self.variables = variables
+            
             self.vars = variables.variable_name.unique()
+            self.vars_numbered = [i for i in enumerate(self.vars)]
+            
 
             command = "SELECT tm.TimeIndex, tm.Year, tm.Month, tm.Day, tm.Hour, tm.Minute FROM Time AS tm"
             time = pd.read_sql_query(command,con=self.myconn)
@@ -31,8 +35,17 @@ class read_eplusql:
             df['date'] = pd.to_datetime(df[['Year','Month','Day','Hour','Minute']])
             df['variable_name'] = df.KeyValue + ':' + df.Name + ' (' + df.Units + ')'
             df  = df.pivot_table(index="date", columns="variable_name", values="Value")
-    #         df  = df.pivot(index="date", columns="variable_name", values="Value")
             self.data = df
+        
+            if rename:
+                variables  = self.data.columns
+                Ti_variables = ["Ti_"+variable.split(":")[0].replace(" ","") if "Zone Mean Air Temperature" in variable else variable for variable in variables]
+                self.rename_cols(range(len(Ti_variables)),Ti_variables)
+            
+            
+                variables  = self.data.columns
+                Ti_variables = ["To" if "Site Outdoor Air Dry" in variable else variable for variable in variables]
+                self.rename_cols(range(len(Ti_variables)),Ti_variables)
     
         
         if (read=="construction") or (read=="all"):
@@ -52,7 +65,12 @@ class read_eplusql:
             self.mlc = mlc
             self.construction_systems = mlc.NameConstruction.unique()
             
-
+    def rename_cols(self,columns,new_names):
+        old_names = self.data.columns[columns]
+        self.data.rename(columns=dict(zip(old_names, new_names)), inplace=True)
+        self.vars = self.data.columns
+        self.vars_numbered = [i for i in enumerate(self.vars)]
+        
     def get_data(self,names):
         result = [variable for name in names for variable in self.vars if name in variable]
         return self.data[result]
